@@ -8,6 +8,11 @@ Ho creato questo progetto per esplorare C# Windows Forms, le chiamate all'API Wi
 
 ---
 
+![DEMOclip-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/1b85648e-ab84-4237-b1cb-e6309752199b)
+
+---
+
+
 ## Features / Funzionalità
 
 - Pixel-art metaball simulation for a fluid lava effect.
