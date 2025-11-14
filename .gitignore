@@ -1,0 +1,10 @@
+# File generati da Visual Studio
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+obj/
+bin/
+
+lavalamp.config.json
