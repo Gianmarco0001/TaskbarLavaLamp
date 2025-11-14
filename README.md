@@ -87,7 +87,7 @@ Devi cliccare **"Ulteriori informazioni"** -> **"Esegui comunque"** per avviare 
 
 2.  Open `TaskbarLavaLamp.sln` with **Visual Studio**. / Apri `TaskbarLavaLamp.sln` con **Visual Studio**.
 
-3.  Ensure the **".NET Desktop Development"** workload is installed. / Assicurati di avere il carico di lavoro **".NET Desktop Development"** installato.
+3.  Ensure the **".NET Desktop Development"** workload is installed. / Assicurati di avere il workload **".NET Desktop Development"** installato.
 
 4.  Install the `Newtonsoft.Json` package from the NuGet Package Manager. / Installa il pacchetto `Newtonsoft.Json` dal Gestore Pacchetti NuGet.
 
