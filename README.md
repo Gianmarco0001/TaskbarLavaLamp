@@ -76,7 +76,7 @@ Devi cliccare **"Ulteriori informazioni"** -> **"Esegui comunque"** per avviare 
 
 1.  Clone the repository / Clona il repository:
     ```bash
-    git clone [https://github.com/Gianmarco0001/TaskbarLavaLamp.git](https://github.com/Gianmarco0001/TaskbarLavaLamp.git)
+    git clone https://github.com/Gianmarco0001/TaskbarLavaLamp.git
     cd TaskbarLavaLamp
     ```
 
