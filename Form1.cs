@@ -1,4 +1,5 @@
-﻿/*
+
+/*
  * Importazioni delle librerie (namespace).
  * - System.*: Classi di base.
  * - System.Drawing/Drawing2D: Per il rendering GDI+ (forme, colori, pennelli).
@@ -496,3 +497,4 @@ namespace TaskbarLavaLamp
         }
     }
 }
+/* Made with ❤️ by Gianmarco Benedetti, inspired by his gf, Elena */
