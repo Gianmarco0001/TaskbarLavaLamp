@@ -1,153 +1,148 @@
-﻿// Importiamo le librerie necessarie.
-// System.Drawing ci serve per le strutture 'PointF' e 'Rectangle',
-// che sono perfette per gestire coordinate 2D.
-using System.Drawing;
-// System ci serve per 'Random' e 'Math'.
+﻿using System.Drawing;
+using System.Drawing.Drawing2D;
 using System;
+// using System.Runtime.InteropServices; // not needed here
 
 namespace TaskbarLavaLamp
 {
-    // Questa è la nostra classe "modello". Non è un oggetto visivo,
-    // ma una struttura dati (un "Plain Old C# Object" o POCO)
-    // che definisce lo STATO di un singolo punto di "energia" della lava.
     public class LavaPoint
     {
-        // --- STATO DELLA PARTICELLA ---
-
-        // 'public' perché il nostro 'Form1' (il motore di rendering)
-        // ha bisogno di leggere queste posizioni ad ogni frame.
-        // Usiamo PointF (float) invece di Point (int) per un
-        // movimento molto più fluido, non "a scatti" sui pixel.
-        public PointF Position; // Vettore Posizione (x, y)
-        public PointF Velocity; // Vettore Velocità (vx, vy)
-
-        // Questo non è il raggio *visivo*, ma il raggio di *influenza*.
-        // Sarà usato nella formula delle metaball (r^2 / dist^2)
-        // per determinare la "forza" di questo punto.
+        public PointF Position;
+        public PointF Velocity;
         public float Radius;
+        public Color PointColor;
+        public LavaShape Shape;
 
-        // Un'istanza privata di Random.
         private Random _rand;
+        private float _wobblePhase;
+        private float _wobbleSpeed;
+        private float[] _vertexOffsets;
 
-        // --- PARAMETRI DI SIMULAZIONE ---
-
-        // Queste 'const' sono le "leggi della fisica" del nostro micro-universo.
-        // Tenerle come costanti in cima le rende facili da "sintonizzare"
-        // per cambiare il "feel" della simulazione.
-        private const float MaxSpeedY = 1.0f;     // Limite di velocità verticale
-        private const float MaxSpeedX = 0.5f;     // Limite di velocità orizzontale
-        private const float Acceleration = 0.02f; // Forza di "galleggiamento" (convezione)
-        private const float Drag = 0.98f;         // Attrito/resistenza del fluido (un valore < 1)
-
-        // Questa è la forza che genera il "wiggle" laterale.
-        // Simula una sorta di moto Browniano.
-        private const float WanderForce = 0.035f;
-
-        // --- COSTRUTTORE ---
-        // Questo è il metodo "spawner". Viene chiamato una sola volta
-        // quando la particella viene creata.
-        public LavaPoint(Rectangle bounds, Random rand)
+        public LavaPoint(Rectangle bounds, Random rand, Color color, LavaShape shape, float sizeMult)
         {
-            // Nota importante: stiamo usando la "Dependency Injection" per 'rand'.
-            // Invece di creare un 'new Random()' qui dentro (che darebbe lo stesso seme
-            // a tutte le particelle create nello stesso millisecondo),
-            // riceviamo un'istanza 'Random' già inizializzata dall'esterno.
-            // Fondamentale per una randomizzazione corretta in un loop.
             _rand = rand;
+            this.PointColor = color;
+            this.Shape = shape;
+            // Raggio base leggermente ridotto per far spazio al bagliore esterno
+            this.Radius = (float)(rand.NextDouble() * 7 + 4) * sizeMult;
+            this.Position = new PointF(rand.Next(bounds.Left, bounds.Right), rand.Next(bounds.Top, bounds.Bottom));
 
-            // Imposta uno stato iniziale casuale per la particella.
-            // Dimensione (raggio di influenza)
-            this.Radius = (float)(rand.NextDouble() * 5 + 5); // Valore tra 5.0 e 10.0
-
-            // Posizione (un punto casuale all'interno dei bordi)
-            this.Position = new PointF(
-                rand.Next(bounds.Left, bounds.Right),
-                rand.Next(bounds.Top, bounds.Bottom)
-            );
-
-            // Velocità iniziale (un piccolo "push" casuale in qualsiasi direzione)
-            this.Velocity = new PointF(
-                (float)(rand.NextDouble() * 0.5 - 0.25), // Tra -0.25 e +0.25
-                (float)(rand.NextDouble() * 1.0 - 0.5)    // Tra -0.5 e +0.5
-            );
+            _wobblePhase = (float)(rand.NextDouble() * Math.PI * 2);
+            _wobbleSpeed = (float)(rand.NextDouble() * 0.1 + 0.05);
+            _vertexOffsets = new float[] { (float)rand.NextDouble(), (float)rand.NextDouble(), (float)rand.NextDouble() };
         }
 
-        // --- METODO DI UPDATE (IL CUORE) ---
-        // Questo metodo viene chiamato ad ogni "tick" del nostro timer
-        // di animazione (es. 30 volte al secondo).
-        // Aggiorna lo stato (Posizione, Velocità) della particella.
-        public void Update(Rectangle bounds)
+        public void Update(Rectangle bounds, float speedMult)
         {
-            // --- 1. SIMULAZIONE FISICA (FORZE) ---
+            // (La fisica del movimento rimane identica)
+            float acceleration = 0.02f * speedMult;
+            float wander = 0.035f * speedMult;
+            float drag = 0.98f;
 
-            // Calcola la posizione Y normalizzata (0.0 = cima, 1.0 = fondo)
             float relativeY = this.Position.Y / (float)bounds.Height;
+            if (relativeY > 0.75) this.Velocity.Y -= acceleration;
+            else if (relativeY < 0.25) this.Velocity.Y += acceleration;
 
-            // Aggiungiamo un fattore di "caos" alla nostra accelerazione
-            // per rendere il movimento meno robotico.
-            float randomFactor = (float)(_rand.NextDouble() * 0.5 + 0.8); // (da 0.8x a 1.3x)
+            this.Velocity.X += (float)(_rand.NextDouble() * (wander * 2) - wander);
+            this.Velocity.X *= drag;
+            this.Velocity.Y *= drag;
 
-            // Questa è la simulazione della CONVEZIONE (caldo/freddo)
-            if (relativeY > 0.75) // Se è nella "zona calda" (fondo)
-            {
-                // Applica una forza verso l'alto (accelerazione negativa)
-                this.Velocity.Y -= Acceleration * randomFactor;
-            }
-            else if (relativeY < 0.25) // Se è nella "zona fredda" (cima)
-            {
-                // Applica una forza verso il basso (accelerazione positiva)
-                this.Velocity.Y += Acceleration * randomFactor;
-            }
-
-            // Applica la forza di "Wander" (movimento laterale)
-            // Scegli un valore casuale tra -WanderForce e +WanderForce
-            this.Velocity.X += (float)(_rand.NextDouble() * (WanderForce * 2) - WanderForce);
-
-            // --- 2. AGGIORNAMENTO STATO (INTEGRAZIONE) ---
-
-            // Applica l'attrito (Drag). Moltiplicare per < 1.0 rallenta
-            // gradualmente la particella, simulando la resistenza del fluido.
-            this.Velocity.X *= Drag;
-            this.Velocity.Y *= Drag;
-
-            // "Clamping" della velocità. Impedisce alle forze di accumularsi
-            // all'infinito e far "esplodere" la simulazione.
-            if (this.Velocity.Y < -MaxSpeedY) this.Velocity.Y = -MaxSpeedY;
-            if (this.Velocity.Y > MaxSpeedY) this.Velocity.Y = MaxSpeedY;
-            if (this.Velocity.X < -MaxSpeedX) this.Velocity.X = -MaxSpeedX;
-            if (this.Velocity.X > MaxSpeedX) this.Velocity.X = MaxSpeedX;
-
-            // Integrazione di Eulero (la forma più semplice):
-            // Nuova Posizione = Vecchia Posizione + (Velocità * DeltaTempo)
-            // (Dato che il nostro DeltaTempo è "1 tick", lo omettiamo)
             this.Position.X += this.Velocity.X;
             this.Position.Y += this.Velocity.Y;
 
-            // --- 3. GESTIONE DEI BORDI (BOUNDARY HANDLING) ---
+            _wobblePhase += _wobbleSpeed * speedMult;
 
-            // Asse X (Orizzontale): Logica di "Rimbalzo"
-            if (this.Position.X - Radius < bounds.Left || this.Position.X + Radius > bounds.Right)
+            // Margine aumentato per evitare che il bagliore "salti" ai bordi
+            float margin = Radius * 2;
+            if (this.Position.Y > bounds.Bottom + margin) this.Position.Y = -margin;
+            else if (this.Position.Y < -margin) this.Position.Y = bounds.Bottom + margin;
+        }
+
+        // --- NUOVO METODO HELPER PER GENERARE LA FORMA ---
+        private GraphicsPath GeneratePath(float currentRadius)
+        {
+            GraphicsPath path = new GraphicsPath();
+            if (this.Shape == LavaShape.Circle)
             {
-                // Inverti la velocità orizzontale
-                this.Velocity.X = -this.Velocity.X;
+                float deformX = (float)Math.Sin(_wobblePhase) * (currentRadius * 0.2f);
+                path.AddEllipse(Position.X - currentRadius, Position.Y - currentRadius, (currentRadius * 2) + deformX, currentRadius * 2);
+            }
+            else if (this.Shape == LavaShape.Triangle)
+            {
+                PointF[] pts = new PointF[3];
+                for (int i = 0; i < 3; i++)
+                {
+                    double angle = (Math.PI * 2 / 3 * i) - Math.PI / 2;
+                    // La deformazione è proporzionale al raggio attuale
+                    float deformedRadius = currentRadius + (float)Math.Sin(_wobblePhase + _vertexOffsets[i] * 5) * (currentRadius * 0.3f);
+                    pts[i] = new PointF(
+                        Position.X + (float)Math.Cos(angle) * deformedRadius,
+                        Position.Y + (float)Math.Sin(angle) * deformedRadius
+                    );
+                }
+                path.AddPolygon(pts);
+            }
+            else // Square
+            {
+                path.AddRectangle(new RectangleF(Position.X - currentRadius, Position.Y - currentRadius, currentRadius * 2, currentRadius * 2));
+            }
+            return path;
+        }
 
-                // Questa riga è un "clamp" di sicurezza. Impedisce alla particella
-                // di rimanere "incastrata" oltre il bordo se la sua velocità
-                // è troppo alta. La forza a tornare dentro i limiti.
-                this.Position.X = Math.Max(bounds.Left + Radius, Math.Min(bounds.Right - Radius, this.Position.X));
+        public void Draw(Graphics g)
+        {
+            // --- PASSAGGIO 1: IL BAGLIORE (GLOW) ---
+            // Generiamo una forma più grande (1.4 volte il raggio normale)
+            using (GraphicsPath glowPath = GeneratePath(Radius * 1.4f))
+            using (PathGradientBrush glowBrush = new PathGradientBrush(glowPath))
+            {
+                // Colore centro del bagliore (semi-trasparente)
+                Color glowCenter = Color.FromArgb(100,
+                    Math.Min(255, PointColor.R + 100),
+                    Math.Min(255, PointColor.G + 100),
+                    Math.Min(255, PointColor.B + 100));
+
+                // Usare un surround semi-trasparente con gli stessi RGB del centro (alpha=0)
+                // evita che i pixel di bordo vengano miscelati col colore di sfondo (TransparencyKey) e causino aloni verdi
+                Color glowSurround = Color.FromArgb(0,
+                    Math.Min(255, PointColor.R + 100),
+                    Math.Min(255, PointColor.G + 100),
+                    Math.Min(255, PointColor.B + 100));
+
+                glowBrush.CenterColor = glowCenter;
+                glowBrush.SurroundColors = new Color[] { glowSurround };
+
+                // Il bagliore è concentrato al centro e sfuma rapidamente
+                glowBrush.FocusScales = new PointF(0.3f, 0.3f);
+
+                g.FillPath(glowBrush, glowPath);
             }
 
-            // Asse Y (Verticale): Logica di "Wrap-Around" (Teletrasporto)
-            // Questo crea un loop infinito e fluido, molto più
-            // "organico" di un semplice rimbalzo.
-            if (this.Position.Y > bounds.Bottom + Radius) // Se esce dal fondo...
+            // --- PASSAGGIO 2: IL NUCLEO ETEREO (CORE) ---
+            // Generiamo la forma di dimensione normale
+            using (GraphicsPath corePath = GeneratePath(Radius))
+            using (PathGradientBrush coreBrush = new PathGradientBrush(corePath))
             {
-                this.Position.Y = -Radius; // ...riappare in cima.
-            }
-            else if (this.Position.Y < -Radius) // Se esce dalla cima...
-            {
-                this.Position.Y = bounds.Bottom + Radius; // ...riappare sul fondo.
+                // Centro del nucleo: più solido (come prima)
+                Color coreCenter = Color.FromArgb(230,
+                    Math.Min(255, PointColor.R + 60),
+                    Math.Min(255, PointColor.G + 60),
+                    Math.Min(255, PointColor.B + 60));
+
+                // Surround con alpha=0 ma stessi RGB del centro per evitare aloni del colore di background
+                Color coreSurround = Color.FromArgb(0,
+                    Math.Min(255, PointColor.R + 60),
+                    Math.Min(255, PointColor.G + 60),
+                    Math.Min(255, PointColor.B + 60));
+
+                coreBrush.CenterColor = coreCenter;
+                coreBrush.SurroundColors = new Color[] { coreSurround };
+                coreBrush.FocusScales = new PointF(0.7f, 0.7f);
+
+                g.FillPath(coreBrush, corePath);
             }
         }
     }
+
+    // Native interop is centralized in NativeMethods.cs
 }
