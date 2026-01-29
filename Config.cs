@@ -16,5 +16,12 @@ namespace TaskbarLavaLamp
         public float SizeMultiplier { get; set; } = 1.0f;
         public LavaShape SelectedShape { get; set; } = LavaShape.Circle;
         public bool IsFrutigerAero { get; set; } = true;
+        public bool StartWithWindows { get; set; } = false;
+
+        // Numero di particelle per pixel di area (es. 0.001 => 1 particella ogni ~1000 px^2)
+        public double ParticleDensity { get; set; } = 0.0015;
+
+        // Limite superiore per evitare allocazioni eccessive su schermi grandi
+        public int MaxParticles { get; set; } = 2000;
     }
 }

@@ -235,7 +235,23 @@ namespace TaskbarLavaLamp
         private void StartAnimation(int count = 0)
         {
             lavaBounds = this.ClientRectangle;
-            int pCount = count > 0 ? count : (int)(lavaBounds.Width / 20);
+
+            int pCount;
+            if (count > 0)
+            {
+                pCount = count;
+            }
+            else
+            {
+                // Calcolo basato sull'area per adattare la densità allo spazio verticale/orizzontale
+                long area = Math.Max(1L, (long)lavaBounds.Width * Math.Max(1, lavaBounds.Height));
+                // Density dal config, scalata anche da SizeMultiplier per mantenere proporzionalità con la dimensione dei punti
+                double density = Math.Max(0.0001, currentConfig.ParticleDensity) * currentConfig.SizeMultiplier;
+                long computed = (long)(area * density);
+                // Clamp su range sensato: almeno 4, massimo MaxParticles
+                pCount = (int)Math.Max(4, Math.Min(computed, currentConfig.MaxParticles));
+            }
+
             InitializeLavaPoints(pCount);
 
             // Non ri-agganciare l'handler qui: è già registrato nel costruttore.
