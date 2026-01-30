@@ -32,6 +32,10 @@ namespace TaskbarLavaLamp
         private int _instanceId;
         private string _configFileName;
 
+        // Nuovi campi per percorso completo della configurazione e cartella utente
+        private string _configDirectory;
+        private string _configFilePath;
+
         private System.Windows.Forms.Timer animationTimer = new System.Windows.Forms.Timer();
         private System.Windows.Forms.Timer stayOnTopTimer = new System.Windows.Forms.Timer();
         private List<LavaPoint> lavaPoints = new List<LavaPoint>();
@@ -48,6 +52,21 @@ namespace TaskbarLavaLamp
             InitializeComponent();
             _instanceId = forcedId ?? ++_instanceCounter;
             _configFileName = $"lavalamp.config.{_instanceId}.json";
+
+            // Usa una cartella scrivibile per le configurazioni dell'utente
+            _configDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TaskbarLavaLamp");
+            try
+            {
+                Directory.CreateDirectory(_configDirectory);
+            }
+            catch
+            {
+                // In caso estremo di fallimento, fallback alla cartella dell'applicazione
+                _configDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            }
+
+            _configFilePath = Path.Combine(_configDirectory, _configFileName);
+
             this.MinimumSize = new Size(0, 0);
 
             // FIX ICONA: Se l'icona manca, ne mettiamo una di sistema per non far sparire la tray
@@ -98,7 +117,7 @@ namespace TaskbarLavaLamp
             };
 
             if (IsFullScreenMode) { EnterFullScreenMode(); }
-            else if (IsFloating || !File.Exists(_configFileName)) { EnterSetupMode(); }
+            else if (IsFloating || !File.Exists(_configFilePath)) { EnterSetupMode(); }
             else { EnterLavaMode(currentConfig); }
         }
 
@@ -116,22 +135,35 @@ namespace TaskbarLavaLamp
 
         private void RestoreOtherLamps()
         {
-            string[] configFiles = Directory.GetFiles(AppDomain.CurrentDomain.BaseDirectory, "lavalamp.config.*.json");
-            foreach (string file in configFiles)
+            // Cerchiamo i file di configurazione sia nella cartella utente sia nella cartella dell'app (compatibilità)
+            var searchDirs = new List<string> { _configDirectory, AppDomain.CurrentDomain.BaseDirectory };
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var dir in searchDirs)
             {
-                string fileName = Path.GetFileName(file);
-                string[] parts = fileName.Split('.');
-                if (parts.Length >= 3 && int.TryParse(parts[2], out int id))
+                try
                 {
-                    if (id > 1)
+                    if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
+                    string[] configFiles = Directory.GetFiles(dir, "lavalamp.config.*.json");
+                    foreach (string file in configFiles)
                     {
-                        Form1 extraLamp = new Form1(id);
-                        extraLamp.IsFloating = true;
-                        extraLamp.Show();
-                        // assicurarsi che la nuova finestra prenda il focus così risponde a key/mouse subito
-                        extraLamp.Activate();
+                        if (!seen.Add(Path.GetFullPath(file))) continue;
+                        string fileName = Path.GetFileName(file);
+                        string[] parts = fileName.Split('.');
+                        if (parts.Length >= 3 && int.TryParse(parts[2], out int id))
+                        {
+                            if (id > 1)
+                            {
+                                Form1 extraLamp = new Form1(id);
+                                extraLamp.IsFloating = true;
+                                extraLamp.Show();
+                                // assicurarsi che la nuova finestra prenda il focus così risponde a key/mouse subito
+                                extraLamp.Activate();
+                            }
+                        }
                     }
                 }
+                catch { }
             }
         }
 
@@ -139,9 +171,28 @@ namespace TaskbarLavaLamp
         {
             try
             {
-                if (File.Exists(_configFileName))
+                if (File.Exists(_configFilePath))
                 {
-                    currentConfig = JsonConvert.DeserializeObject<Config>(File.ReadAllText(_configFileName));
+                    currentConfig = JsonConvert.DeserializeObject<Config>(File.ReadAllText(_configFilePath));
+                }
+                else
+                {
+                    // fallback: se esiste nella cartella dell'app, copialo nella cartella utente e usalo
+                    string fallback = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _configFileName);
+                    if (File.Exists(fallback))
+                    {
+                        try
+                        {
+                            var text = File.ReadAllText(fallback);
+                            currentConfig = JsonConvert.DeserializeObject<Config>(text);
+                            try
+                            {
+                                File.WriteAllText(_configFilePath, text);
+                            }
+                            catch { /* non critico */ }
+                        }
+                        catch { /* non critico */ }
+                    }
                 }
             }
             catch { }
@@ -155,7 +206,15 @@ namespace TaskbarLavaLamp
             currentConfig.Y = this.Top;
             currentConfig.Width = this.Width;
             currentConfig.Height = this.Height;
-            File.WriteAllText(_configFileName, JsonConvert.SerializeObject(currentConfig, Formatting.Indented));
+            try
+            {
+                File.WriteAllText(_configFilePath, JsonConvert.SerializeObject(currentConfig, Formatting.Indented));
+            }
+            catch (Exception ex)
+            {
+                // Loggare il problema ma non crashare l'app
+                try { Logger.Log($"SaveConfiguration failed for path {_configFilePath}: {ex}"); } catch { }
+            }
         }
 
         private void EnterSetupMode()
@@ -570,7 +629,7 @@ namespace TaskbarLavaLamp
         private void impostazioniToolStripMenuItem_Click(object sender, EventArgs e)
         {
             animationTimer.Stop();
-            SettingsForm settingsWindow = new SettingsForm(_configFileName);
+            SettingsForm settingsWindow = new SettingsForm(_configFilePath);
             if (settingsWindow.ShowDialog() == DialogResult.OK) LoadConfiguration();
             if (!inSetupMode) StartAnimation();
         }
@@ -584,7 +643,7 @@ namespace TaskbarLavaLamp
         {
             if (MessageBox.Show("Rimuovere definitivamente?", "Conferma", MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
-                if (File.Exists(_configFileName)) File.Delete(_configFileName);
+                try { if (File.Exists(_configFilePath)) File.Delete(_configFilePath); } catch { }
                 this.Close();
             }
         }
